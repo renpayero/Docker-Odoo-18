@@ -1,0 +1,1 @@
+docker-compose run --rm web odoo -c /etc/odoo/odoo.conf -d postgres -u all --stop-after-init
