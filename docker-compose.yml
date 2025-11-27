@@ -1,0 +1,28 @@
+version: "3.1"
+
+services:
+  web:
+    image: odoo:18
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+    volumes:
+      - ./addons:/mnt/extra-addons # Carpeta para los módulos personalizados
+      - ./odoo.conf:/etc/odoo/odoo.conf # Archivo de configuración de Odoo
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_DB=postgres
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data # Guarda los datos de la base de datos
+
+volumes:
+  pg_data:
