@@ -4,6 +4,11 @@ USER root
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
+        swig \
+        libssl-dev \
+        python3-dev \
+        git \
         python3-pip \
         libjpeg-dev \
         zlib1g-dev \

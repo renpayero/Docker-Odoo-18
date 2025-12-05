@@ -19,27 +19,57 @@ class ProductTemplate(models.Model):
     supplier_taxes_id = fields.Many2many(default=lambda self: self.env["account.tax"])
 
     @api.model
+    def _get_default_iva_zero_tax(self, company_id, tax_type):
+        company = self.env["res.company"].browse(company_id) if company_id else self.env.company
+        if not company:
+            company = self.env.company
+
+        tax = self.env["account.tax"].search(
+            [
+                ("company_id", "=", company.id),
+                ("type_tax_use", "=", tax_type),
+                ("amount", "=", 0),
+                ("tax_group_id.name", "=", "IVA"),
+            ],
+            limit=1,
+        )
+        if not tax:
+            raise UserError(
+                "No se encontró un impuesto IVA 0% para la compañía %s. Configure uno para continuar." % company.display_name
+            )
+        return tax
+
+    @api.model
     def default_get(self, fields_list):
         defaults = super().default_get(fields_list)
 
         if "is_storable" in self._fields and "default_is_storable" not in self.env.context:
             defaults["is_storable"] = defaults.get("is_storable", True) or True
 
+        company_id = self.env.context.get("force_company") or self.env.company.id
+
         if "taxes_id" in self._fields and "default_taxes_id" not in self.env.context:
-            defaults["taxes_id"] = defaults.get("taxes_id") or [Command.clear()]
+            defaults["taxes_id"] = defaults.get("taxes_id") or [
+                Command.set(self._get_default_iva_zero_tax(company_id, "sale").ids)
+            ]
 
         if "supplier_taxes_id" in self._fields and "default_supplier_taxes_id" not in self.env.context:
-            defaults["supplier_taxes_id"] = defaults.get("supplier_taxes_id") or [Command.clear()]
+            defaults["supplier_taxes_id"] = defaults.get("supplier_taxes_id") or [
+                Command.set(self._get_default_iva_zero_tax(company_id, "purchase").ids)
+            ]
 
         return defaults
 
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
-            if "taxes_id" not in vals and "default_taxes_id" not in self.env.context:
-                vals["taxes_id"] = [Command.clear()]
-            if "supplier_taxes_id" not in vals and "default_supplier_taxes_id" not in self.env.context:
-                vals["supplier_taxes_id"] = [Command.clear()]
+            company_id = vals.get("company_id") or self.env.company.id
+
+            if ("taxes_id" not in vals or not vals.get("taxes_id")) and "default_taxes_id" not in self.env.context:
+                vals["taxes_id"] = [Command.set(self._get_default_iva_zero_tax(company_id, "sale").ids)]
+
+            if ("supplier_taxes_id" not in vals or not vals.get("supplier_taxes_id")) and "default_supplier_taxes_id" not in self.env.context:
+                vals["supplier_taxes_id"] = [Command.set(self._get_default_iva_zero_tax(company_id, "purchase").ids)]
         return super().create(vals_list)
 
     def _compute_qty_available_manual(self):
