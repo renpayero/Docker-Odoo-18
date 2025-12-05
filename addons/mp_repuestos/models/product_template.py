@@ -24,20 +24,41 @@ class ProductTemplate(models.Model):
         if not company:
             company = self.env.company
 
-        tax = self.env["account.tax"].search(
-            [
-                ("company_id", "=", company.id),
-                ("type_tax_use", "=", tax_type),
-                ("amount", "=", 0),
-                ("tax_group_id.name", "=", "IVA"),
-            ],
-            limit=1,
-        )
-        if not tax:
-            raise UserError(
-                "No se encontró un impuesto IVA 0% para la compañía %s. Configure uno para continuar." % company.display_name
+        tax_model = self.env["account.tax"]
+        base_domain = [
+            ("company_id", "=", company.id),
+            ("type_tax_use", "=", tax_type),
+            ("amount", "=", 0),
+        ]
+        search_order = "sequence, id"
+
+        tax_group_model = self.env["account.tax.group"]
+        has_afip_code = "l10n_ar_vat_afip_code" in tax_group_model._fields
+        candidate_domains = []
+        if has_afip_code:
+            candidate_domains.append(base_domain + [("tax_group_id.l10n_ar_vat_afip_code", "=", "0")])
+            candidate_domains.append(
+                base_domain + [("tax_group_id.l10n_ar_vat_afip_code", "in", ("1", "2", "3", "7"))]
             )
-        return tax
+
+        candidate_domains.extend(
+            [
+                base_domain + [("tax_group_id.name", "ilike", "IVA 0%")],
+                base_domain + [("name", "ilike", "IVA 0%")],
+                base_domain + [("tax_group_id.name", "ilike", "IVA")],
+                base_domain + [("name", "ilike", "IVA")],
+                base_domain,
+            ]
+        )
+
+        for domain in candidate_domains:
+            tax = tax_model.search(domain, limit=1, order=search_order)
+            if tax:
+                return tax
+
+        raise UserError(
+            "No se encontró un impuesto IVA 0% para la compañía %s. Configure uno para continuar." % company.display_name
+        )
 
     @api.model
     def default_get(self, fields_list):
